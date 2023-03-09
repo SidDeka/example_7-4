@@ -13,91 +13,26 @@
 
 //=====[Declaration and initialization of public global objects]===============
 
-DigitalInOut motorM1Pin(PF_2);
-DigitalInOut motorM2Pin(PE_3);
+DigitalOut motorM1Pin(PF_2);
+DigitalOut motorM2Pin(PE_3);
 
-//=====[Declaration of external public global variables]=======================
 
-//=====[Declaration and initialization of public global variables]=============
-
-motorDirection_t motorDirection;
-motorDirection_t motorState;
-
-//=====[Declaration and initialization of private global variables]============
-
-//=====[Declarations (prototypes) of private functions]========================
-
-//=====[Implementations of public functions]===================================
 
 void motorControlInit()
 {
-    motorM1Pin.mode(OpenDrain);
-    motorM2Pin.mode(OpenDrain);
-    
-    motorM1Pin.input();
-    motorM2Pin.input();
-
-    motorDirection = STOPPED;
-    motorState = STOPPED;
+    motorM1Pin = OFF;
+    motorM2Pin = OFF;
 }
 
-motorDirection_t motorDirectionRead()
-{
-    return motorDirection;
+
+void fan_on(){
+    motorM1Pin = OFF;
+    motorM2Pin = ON;
 }
 
-void motorDirectionWrite( motorDirection_t direction )
-{
-    motorDirection = direction;
-}
-
-void motorControlUpdate()
-{
-    static int motorUpdateCounter = 0;
-    
-    motorUpdateCounter++;
-    
-    if ( motorUpdateCounter > MOTOR_UPDATE_TIME ) {
-        
-        motorUpdateCounter = 0;
-        
-        switch ( motorState ) {
-            case DIRECTION_1:
-                if ( motorDirection == DIRECTION_2 || 
-                     motorDirection == STOPPED ) {
-                    motorM1Pin.input();
-                    motorM2Pin.input();
-                    motorState = STOPPED;
-                }
-            break;
-    
-            case DIRECTION_2:
-                if ( motorDirection == DIRECTION_1 || 
-                     motorDirection == STOPPED ) {
-                    motorM1Pin.input();
-                    motorM2Pin.input();
-                    motorState = STOPPED;
-                }
-            break;
-    
-            case STOPPED:
-            default:
-                if ( motorDirection == DIRECTION_1 ) {
-                    motorM2Pin.input();
-                    motorM1Pin.output();
-                    motorM1Pin = LOW;
-                    motorState = DIRECTION_1;
-                }
-                
-                if ( motorDirection == DIRECTION_2 ) {
-                    motorM1Pin.input();
-                    motorM2Pin.output();
-                    motorM2Pin = LOW;
-                    motorState = DIRECTION_2;
-                }
-            break;
-        }
-    }        
+void fan_off(){
+    motorM1Pin = OFF;
+    motorM2Pin = OFF;
 }
 
 //=====[Implementations of private functions]==================================

@@ -4,323 +4,187 @@
 #include "arm_book_lib.h"
 
 #include "user_interface.h"
+#include <cctype>
 
-#include "code.h"
-#include "siren.h"
 #include "smart_home_system.h"
-#include "fire_alarm.h"
-#include "date_and_time.h"
 #include "temperature_sensor.h"
-#include "gas_sensor.h"
 #include "matrix_keypad.h"
 #include "display.h"
-#include "GLCD_fire_alarm.h"
-#include "GLCD_intruder_alarm.h"
 #include "motor.h"
-#include "gate.h"
-#include "motion_sensor.h"
-#include "alarm.h"
-#include "intruder_alarm.h"
+
 
 //=====[Declaration of private defines]========================================
 
-#define DISPLAY_REFRESH_TIME_REPORT_MS 1000
-#define DISPLAY_REFRESH_TIME_ALARM_MS 300
+#define DISPLAY_REFRESH_TIME_MS 1000
 
 //=====[Declaration of private data types]=====================================
 
-typedef enum{
-    DISPLAY_ALARM_STATE,
-    DISPLAY_REPORT_STATE
-} displayState_t;
-
 //=====[Declaration and initialization of public global objects]===============
 
-DigitalOut incorrectCodeLed(LED3);
-DigitalOut systemBlockedLed(LED2);
-
-InterruptIn gateOpenButton(PF_9);
-InterruptIn gateCloseButton(PF_8);
 
 //=====[Declaration of external public global variables]=======================
+char pressed[2];
+
 
 //=====[Declaration and initialization of public global variables]=============
 
-char codeSequenceFromUserInterface[CODE_NUMBER_OF_KEYS];
 
-//=====[Declaration and initialization of private global variables]============
-
-static displayState_t displayState = DISPLAY_REPORT_STATE;
-static int displayFireAlarmGraphicSequence = 0;
-static int displayIntruderAlarmGraphicSequence = 0;
-static int displayRefreshTimeMs = DISPLAY_REFRESH_TIME_REPORT_MS;
-
-static bool incorrectCodeState = OFF;
-static bool systemBlockedState = OFF;
-
-static bool codeComplete = false;
-static int numberOfCodeChars = 0;
 
 //=====[Declarations (prototypes) of private functions]========================
 
 static void userInterfaceMatrixKeypadUpdate();
-static void incorrectCodeIndicatorUpdate();
-static void systemBlockedIndicatorUpdate();
-
 static void userInterfaceDisplayInit();
 static void userInterfaceDisplayUpdate();
-static void userInterfaceDisplayReportStateInit();
-static void userInterfaceDisplayReportStateUpdate();
-static void userInterfaceDisplayAlarmStateInit();
-static void userInterfaceDisplayAlarmStateUpdate();
+static bool isNumber(char str);
 
-static void gateOpenButtonCallback();
-static void gateCloseButtonCallback();
 
 //=====[Implementations of public functions]===================================
 
 void userInterfaceInit()
 {
-    gateOpenButton.mode(PullUp);
-    gateCloseButton.mode(PullUp);
-
-    gateOpenButton.fall(&gateOpenButtonCallback);
-    gateCloseButton.fall(&gateCloseButtonCallback);
-    
-    incorrectCodeLed = OFF;
-    systemBlockedLed = OFF;
     matrixKeypadInit( SYSTEM_TIME_INCREMENT_MS );
     userInterfaceDisplayInit();
 }
 
 void userInterfaceUpdate()
 {
-    userInterfaceMatrixKeypadUpdate();
-    incorrectCodeIndicatorUpdate();
-    systemBlockedIndicatorUpdate();
+
     userInterfaceDisplayUpdate();
+    userInterfaceMatrixKeypadUpdate();
 }
 
-bool incorrectCodeStateRead()
-{
-    return incorrectCodeState;
-}
-
-void incorrectCodeStateWrite( bool state )
-{
-    incorrectCodeState = state;
-}
-
-bool systemBlockedStateRead()
-{
-    return systemBlockedState;
-}
-
-void systemBlockedStateWrite( bool state )
-{
-    systemBlockedState = state;
-}
-
-bool userInterfaceCodeCompleteRead()
-{
-    return codeComplete;
-}
-
-void userInterfaceCodeCompleteWrite( bool state )
-{
-    codeComplete = state;
-}
 
 //=====[Implementations of private functions]==================================
 
 static void userInterfaceMatrixKeypadUpdate()
 {
-    static int numberOfHashKeyReleased = 0;
     char keyReleased = matrixKeypadUpdate();
 
-    if( keyReleased != '\0' ) {
+    static int refresh_time = 0; //this counter keeps track of the time to continue showing the numbers entered before clearing the display
+    static int pos_x = 10;
+    static int pressed_pos = 0;
+    static int num_pressed = 0; //keeps count of number of times keys were pressed
+    static int temp_threshold = 0;
 
-        if( sirenStateRead() && !systemBlockedStateRead() ) {
-            if( !incorrectCodeStateRead() ) {
-                codeSequenceFromUserInterface[numberOfCodeChars] = keyReleased;
-                numberOfCodeChars++;
-                if ( numberOfCodeChars >= CODE_NUMBER_OF_KEYS ) {
-                    codeComplete = true;
-                    numberOfCodeChars = 0;
+    float current_temp = temperatureSensorReadCelsius();
+
+    
+    //refresh_time+= SYSTEM_TIME_INCREMENT_MS;
+
+    if(num_pressed >=2)
+    {
+        if(num_pressed == 3)
+        {
+            clearDisplayRange(1, 10, 1, 15); 
+        }
+
+         refresh_time+= SYSTEM_TIME_INCREMENT_MS;
+
+        if(refresh_time >= DISPLAY_REFRESH_TIME_MS)
+        {
+            clearDisplayRange(1, 10, 1, 15); 
+            pos_x = 10;
+            pressed_pos = 0 ;
+            num_pressed = 0;
+            refresh_time = 0;
+        }
+    }
+
+           
+       if(temp_threshold >= current_temp)
+       {
+           fan_off();
+           temp_threshold = 0;
+       }
+ 
+  
+    if( keyReleased != '\0' ) 
+    {
+
+        pressed[2] = '\0';
+        pressed[pressed_pos] = keyReleased;
+        pressed_pos++;
+  
+
+        displayCharPositionWrite (pos_x, 1 );
+        char str3[2];
+        str3[0] = keyReleased;
+        str3[1] = '\0';
+        displayStringWrite(str3);
+     
+  
+      
+
+     
+
+        pos_x++;
+
+        num_pressed++;
+
+        if(num_pressed >= 2)
+        {  
+            int digit1 = pressed[0] - '0';
+            int digit2 = pressed[1] - '0'; // convert second character to integer
+            temp_threshold = digit1 * 10 + digit2;
+
+            if(temp_threshold < current_temp)
+            {
+                fan_on();
+            }
+        }
+
+    
+
+
                 }
-            } else {
-                if( keyReleased == '#' ) {
-                    numberOfHashKeyReleased++;
-                    if( numberOfHashKeyReleased >= 2 ) {
-                        numberOfHashKeyReleased = 0;
-                        numberOfCodeChars = 0;
-                        codeComplete = false;
-                        incorrectCodeState = OFF;
-                    }
-                }
             }
-        } else if ( !systemBlockedStateRead() ) {
-            if( keyReleased == 'A' ) {
-                motionSensorActivate();
-            }
-            if( keyReleased == 'B' ) {
-                motionSensorDeactivate();
-            }
-        }
-    }
-}
+        
+ 
 
-static void userInterfaceDisplayReportStateInit()
-{
-    displayState = DISPLAY_REPORT_STATE;
-    displayRefreshTimeMs = DISPLAY_REFRESH_TIME_REPORT_MS;
-    
-    displayModeWrite( DISPLAY_MODE_CHAR );
-
-    displayClear();
-
-    displayCharPositionWrite ( 0,0 );
-    displayStringWrite( "Temperature:" );
-
-    displayCharPositionWrite ( 0,1 );
-    displayStringWrite( "Gas:" );
-    
-    displayCharPositionWrite ( 0,2 );
-    displayStringWrite( "Alarm:" );
-}
-
-static void userInterfaceDisplayReportStateUpdate()
-{
-    char temperatureString[3] = "";
-    
-    sprintf(temperatureString, "%.0f", temperatureSensorReadCelsius());
-    displayCharPositionWrite ( 12,0 );
-    displayStringWrite( temperatureString );
-    displayCharPositionWrite ( 14,0 );
-    displayStringWrite( "'C" );
-
-    displayCharPositionWrite ( 4,1 );
-
-    if ( gasDetectorStateRead() ) {
-        displayStringWrite( "Detected    " );
-    } else {
-        displayStringWrite( "Not Detected" );
-    }
-    displayCharPositionWrite ( 6,2 );
-    displayStringWrite( "OFF" );
-}
-
-static void userInterfaceDisplayAlarmStateInit()
-{
-    displayState = DISPLAY_ALARM_STATE;
-    displayRefreshTimeMs = DISPLAY_REFRESH_TIME_ALARM_MS;
-
-    displayClear();
-
-    displayModeWrite( DISPLAY_MODE_GRAPHIC );
-   
-    displayFireAlarmGraphicSequence = 0;
-}
-
-static void userInterfaceDisplayAlarmStateUpdate()
-{
-    if ( ( gasDetectedRead() ) || ( overTemperatureDetectedRead() ) ) {
-        switch( displayFireAlarmGraphicSequence ) {
-        case 0:
-            displayBitmapWrite( GLCD_fire_alarm[0] );
-            displayFireAlarmGraphicSequence++;
-            break;
-        case 1:
-            displayBitmapWrite( GLCD_fire_alarm[1] );
-            displayFireAlarmGraphicSequence++;
-            break;
-        case 2:
-            displayBitmapWrite( GLCD_fire_alarm[2] );
-            displayFireAlarmGraphicSequence++;
-            break;
-        case 3:
-            displayBitmapWrite( GLCD_fire_alarm[3] );
-            displayFireAlarmGraphicSequence = 0;
-            break;
-        default:
-            displayBitmapWrite( GLCD_ClearScreen );
-            displayFireAlarmGraphicSequence = 0;
-            break;
-        }
-    } else if ( intruderDetectedRead() ) {
-        switch( displayIntruderAlarmGraphicSequence ) {
-        case 0:
-            displayBitmapWrite( GLCD_intruder_alarm );
-            displayIntruderAlarmGraphicSequence++;
-            break;
-        case 1:
-        default:
-            displayBitmapWrite( GLCD_ClearScreen );
-            displayIntruderAlarmGraphicSequence = 0;
-            break;
-        }
-    }
-}
 
 static void userInterfaceDisplayInit()
 {
-    displayInit( DISPLAY_TYPE_GLCD_ST7920, DISPLAY_CONNECTION_SPI );
-    userInterfaceDisplayReportStateInit();
-}
+    displayInit( DISPLAY_CONNECTION_I2C_PCF8574_IO_EXPANDER );
+ 
+
+    displayCharPositionWrite ( 0,0 );
+    displayStringWrite( "Temp:" );
+
+    displayCharPositionWrite ( 0,1 );
+    displayStringWrite( "Entr Temp:" );
+
+
+ }
 
 static void userInterfaceDisplayUpdate()
 {
     static int accumulatedDisplayTime = 0;
+    char temperatureString[5] = "";
+  
     
     if( accumulatedDisplayTime >=
-        displayRefreshTimeMs ) {
+        DISPLAY_REFRESH_TIME_MS ) {
 
         accumulatedDisplayTime = 0;
 
-        switch ( displayState ) {
-            case DISPLAY_REPORT_STATE:
-                userInterfaceDisplayReportStateUpdate();
+        sprintf(temperatureString, "%.2f", temperatureSensorReadCelsius());
+        displayCharPositionWrite ( 5,0 );
+        displayStringWrite( temperatureString );
 
-                if ( sirenStateRead() ) {
-                    userInterfaceDisplayAlarmStateInit();
-                }
-            break;
-
-            case DISPLAY_ALARM_STATE:
-                userInterfaceDisplayAlarmStateUpdate();
-
-                if ( !sirenStateRead() ) {
-                    userInterfaceDisplayReportStateInit();
-                }
-            break;
-
-            default:
-                userInterfaceDisplayReportStateInit();
-            break;
-        }
-
-   } else {
+    } else {
         accumulatedDisplayTime =
             accumulatedDisplayTime + SYSTEM_TIME_INCREMENT_MS;        
-    }
+    } 
 }
 
-static void incorrectCodeIndicatorUpdate()
-{
-    incorrectCodeLed = incorrectCodeStateRead();
+static bool isNumber(char str){
+
+    bool num = true;
+
+     if (!isdigit(str)) {
+            num = false;
+     }
+
+     return num;
 }
 
-static void systemBlockedIndicatorUpdate()
-{
-    systemBlockedLed = systemBlockedState;
-}
-
-static void gateOpenButtonCallback()
-{
-    gateOpen();
-}
-
-static void gateCloseButtonCallback()
-{
-    gateClose();
-}
