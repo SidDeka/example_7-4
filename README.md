@@ -2,7 +2,7 @@
 Joseph Cirksey and Siddhant Deka
 Code submitted for rewview at 03/10/23
 
-# Smart home ssytem module:
+# Smart home sytem module:
 This module intiliatses the user interface, temperature sensor and motor control.
 The module also provides a system delay of 10 ms and continuously runs userInterfaceUpdate() and temperatureSensorUpdate() functions.
 
