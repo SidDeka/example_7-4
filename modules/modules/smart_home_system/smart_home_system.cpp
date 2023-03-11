@@ -5,6 +5,7 @@
 #include "smart_home_system.h"
 #include "user_interface.h"
 #include "temperature_sensor.h"
+#include "motor.h"
 
 
 
@@ -13,6 +14,7 @@ void smartHomeSystemInit()
 {
     userInterfaceInit();
     temperatureSensorInit();
+    motorControlInit();
 
 }
 
